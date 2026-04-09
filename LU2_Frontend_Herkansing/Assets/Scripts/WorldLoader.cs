@@ -11,9 +11,6 @@ public class WorldLoader : MonoBehaviour
 	[SerializeField]
 	private GameObject ObjectUIItem;
 
-	[SerializeField]
-	private GameObject DragDropScript;
-
 	public void Awake()
 	{
 		WorldMaker.Instance.Generate();
@@ -26,7 +23,6 @@ public class WorldLoader : MonoBehaviour
 			GameObject newItem = Instantiate(ObjectUIItem, ObjectPanel.transform);
 			newItem.GetComponent<Image>().sprite = prefabs[i].GetComponent<SpriteRenderer>().sprite;
 			newItem.GetComponent<WorldObjectButton>().PrefabIndex = i;
-			newItem.GetComponent<WorldObjectButton>().DragDropScript = DragDropScript;
 		}
 	}
 }

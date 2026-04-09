@@ -1,3 +1,5 @@
+using System;
+
 public class WorldObject
 {
 	public WorldObject() {
@@ -9,7 +11,7 @@ public class WorldObject
 		Layer = 0;
 	}
 
-	public WorldObject(string id, string prefabId, int x, int y, int width, int height, int rotation, int layer)
+	public WorldObject(Guid id, string prefabId, int x, int y, int width, int height, int rotation, int layer)
 	{
 		ID = id;
 		PrefabID = prefabId;
@@ -31,7 +33,7 @@ public class WorldObject
 		Layer = layer;
 	}
 
-	public string ID;
+	public Guid ID;
 	public string PrefabID;
 	public int X, Y;
 	public int Width, Height;

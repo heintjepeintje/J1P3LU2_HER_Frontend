@@ -11,6 +11,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/WorldSelectorScene.unity
     guid: d8d5f601cb14e6e4bb8a57878d51aa21
+  - enabled: 1
+    path: Assets/Scenes/World Scene.unity
+    guid: 71468c67d5274504ca08246dc18406da
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
   m_UseUCBPForAssetBundles: 0

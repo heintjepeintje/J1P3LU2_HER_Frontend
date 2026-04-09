@@ -1,7 +1,10 @@
 using Newtonsoft.Json.Linq;
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Net.Sockets;
 using UnityEditor;
+using UnityEditor.ShaderGraph.Serialization;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Rendering;
@@ -13,13 +16,15 @@ public class WorldMaker : MonoBehaviour
 	[SerializeField]
 	private GameObject GrassTile;
 
-	private List<WorldObject> _savedObjects;
-	private List<WorldObject> _newObjects;
+	private List<WorldObject> _objects = new();
+	private List<WorldObject> _newObjects = new();
 
 	[SerializeField]
 	private List<GameObject> _prefabs;
 
 	public static WorldMaker Instance;
+
+	private List<GameObject> _worldPrefabs = new();
 
 	public void Awake() {
 		if (Instance == null)
@@ -35,10 +40,14 @@ public class WorldMaker : MonoBehaviour
 		Debug.Log($"SetWorld ID: {_currentWorld.ID}");
 	}
 
+	public World GetWorld()
+	{
+		return _currentWorld;
+	}
+
 	public async void Load()
 	{
 		if (_currentWorld == null) return;
-		_newObjects = new List<WorldObject>();
 
 		string bearerToken = AccountManager.Instance.GetBearerToken();
 		Debug.Log($"ID: {_currentWorld.ID}");
@@ -54,12 +63,12 @@ public class WorldMaker : MonoBehaviour
 		}
 
 		JArray objectsJson = JArray.Parse(request.downloadHandler.text);
-		_savedObjects = new List<WorldObject>(objectsJson.Count);
+		_objects = new List<WorldObject>(objectsJson.Count);
 		
 		for (int i = 0; i < objectsJson.Count; i++) {
 			JObject savedObject = objectsJson[i] as JObject;
 			WorldObject newObject = new(
-				savedObject["id"].Value<string>(),
+				Guid.Parse(savedObject["id"].Value<string>()),
 				savedObject["prefabID"].Value<string>(),
 				savedObject["x"].Value<int>(),
 				savedObject["y"].Value<int>(),
@@ -71,9 +80,11 @@ public class WorldMaker : MonoBehaviour
 
 			int prefabIndex = int.Parse(newObject.PrefabID);
 			GameObject newGameObject = Instantiate(_prefabs[prefabIndex]);
+			newGameObject.GetComponent<DraggableItem>().WorldObject = newObject;
 			newGameObject.transform.position = new Vector3(newObject.X, newObject.Y, -1);
+			_worldPrefabs.Add(newGameObject);
 
-			_savedObjects.Add(newObject);
+			_objects.Add(newObject);
 		}
 	}
 
@@ -101,40 +112,87 @@ public class WorldMaker : MonoBehaviour
 		_newObjects.Add(worldObject);
 	}
 
+	public void AddPrefab(GameObject prefab)
+	{
+		_worldPrefabs.Add(prefab);
+	}
+
+	public void DestroyPrefabs()
+	{
+		foreach (GameObject prefab in _worldPrefabs)
+		{
+			Destroy(prefab);
+		}
+
+		_worldPrefabs.Clear();
+	}
+
 	public List<GameObject> GetPrefabs() {
 		return _prefabs;
 	}
 
 	public async void Save()
 	{
-		JArray newObjectsJson = new JArray();
-		foreach (WorldObject obj in _newObjects)
+		if (_newObjects.Count > 0)
 		{
-			JObject newObjectJson = new JObject();
-			newObjectJson["environmentId"] = _currentWorld.ID;
-			newObjectJson["prefabId"] = obj.PrefabID;
-			newObjectJson["x"] = obj.X;
-			newObjectJson["y"] = obj.Y;
-			newObjectJson["width"] = obj.Width;
-			newObjectJson["height"] = obj.Height;
-			newObjectsJson["rotation"] = obj.Rotation;
-			newObjectsJson["layer"] = obj.Layer;
+			JArray newObjectsJson = new JArray();
+			foreach (WorldObject obj in _newObjects)
+			{
+				JObject objectJson = new JObject();
+				objectJson["environmentId"] = _currentWorld.ID;
+				objectJson["prefabId"] = obj.PrefabID;
+				objectJson["x"] = obj.X;
+				objectJson["y"] = obj.Y;
+				objectJson["width"] = obj.Width;
+				objectJson["height"] = obj.Height;
+				objectJson["rotation"] = obj.Rotation;
+				objectJson["layer"] = obj.Layer;
 
-			newObjectsJson.Add(newObjectJson);
+				newObjectsJson.Add(objectJson);
+			}
+
+			string bearerToken = AccountManager.Instance.GetBearerToken();
+			UnityWebRequest webRequest = await AccountManager.Instance.PerformApiCall(
+				$"{AccountManager.ApiUrl}/objects", "POST", newObjectsJson.ToString(), bearerToken);
+
+			if (webRequest.result != UnityWebRequest.Result.Success)
+			{
+				Debug.LogError(webRequest.downloadHandler.text);
+				return;
+			}
 		}
 
-		string json = newObjectsJson.ToString();
-		Debug.Log(json);
+		foreach (WorldObject obj in _objects)
+		{
+			JObject updatedObjectJson = new JObject();
+			updatedObjectJson["id"] = obj.ID.ToString();
+			updatedObjectJson["environmentId"] = _currentWorld.ID;
+			updatedObjectJson["prefabId"] = obj.PrefabID;
+			updatedObjectJson["x"] = obj.X;
+			updatedObjectJson["y"] = obj.Y;
+			updatedObjectJson["width"] = obj.Width;
+			updatedObjectJson["height"] = obj.Height;
+			updatedObjectJson["rotation"] = obj.Rotation;
+			updatedObjectJson["layer"] = obj.Layer;
 
-		string bearerToken = AccountManager.Instance.GetBearerToken();
-		UnityWebRequest webRequest = await AccountManager.Instance.PerformApiCall(AccountManager.ApiUrl + $"/objects", "POST", json, bearerToken);
-	
-		if (webRequest.result != UnityWebRequest.Result.Success) {
-			Debug.LogError(webRequest.downloadHandler.text);
-			return;
+			UnityWebRequest result = await AccountManager.Instance.PerformApiCall(
+				$"{AccountManager.ApiUrl}/objects", "PUT", updatedObjectJson.ToString(), AccountManager.Instance.GetBearerToken());
+		
+			if (result.result != UnityWebRequest.Result.Success)
+			{
+				Debug.Log(result.downloadHandler.text);
+				break;
+			}
 		}
 
-		Debug.Log("Success!");
+		foreach (GameObject instancedObject in _worldPrefabs)
+		{
+			Destroy(instancedObject);
+		}
+		_objects.Clear();
+		_newObjects.Clear();
+
+		Load();
 	}
 
 }
